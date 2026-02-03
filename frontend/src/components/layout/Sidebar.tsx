@@ -11,7 +11,8 @@ import {
   BarChart3,
   Server,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from "lucide-react"
 import { cn } from "@/utils/cn"
 import { useAuth } from "@/hooks/useAuth"
@@ -37,6 +38,7 @@ const mainNavItems: NavItem[] = [
 const taskNavItems: NavItem[] = [
   { title: "任务列表", href: "/tasks", icon: ListTodo },
   { title: "历史记录", href: "/history", icon: History },
+  { title: "回收站", href: "/tasks/recycle-bin", icon: Trash2 },
 ]
 
 const userNavItems: NavItem[] = [

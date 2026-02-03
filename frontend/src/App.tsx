@@ -24,6 +24,7 @@ import { ImageEditPage } from "@/pages/generate/ImageEditPage"
 import { BatchEditPage } from "@/pages/generate/BatchEditPage"
 import { TaskListPage } from "@/pages/tasks/TaskListPage"
 import { TaskDetailPage } from "@/pages/tasks/TaskDetailPage"
+import { RecycleBinPage } from "@/pages/tasks/RecycleBinPage"
 import { HistoryPage } from "@/pages/history/HistoryPage"
 import { ProfilePage } from "@/pages/profile/ProfilePage"
 import { QuotaPage } from "@/pages/profile/QuotaPage"
@@ -93,6 +94,7 @@ function AppContent() {
 
         {/* Tasks */}
         <Route path="/tasks" element={<TaskListPage />} />
+        <Route path="/tasks/recycle-bin" element={<RecycleBinPage />} />
         <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
 
         {/* History */}

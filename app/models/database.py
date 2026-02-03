@@ -77,6 +77,9 @@ class TaskHistory(Base):
     # 执行时间（秒）
     execution_time = Column(Float, nullable=True)
     
+    # 是否已删除（回收站）
+    is_deleted = Column(Boolean, default=False, index=True)
+    
     # 关联用户
     user = relationship("User", back_populates="tasks")
     
@@ -193,6 +196,22 @@ async def init_database() -> None:
     
     # 使用同步引擎创建表
     Base.metadata.create_all(bind=_sync_engine)
+    
+    # 检查并迁移数据库结构
+    from sqlalchemy import text, inspect
+    try:
+        with _sync_engine.connect() as conn:
+            inspector = inspect(conn)
+            # 检查 task_history 表是否存在
+            if inspector.has_table("task_history"):
+                columns = [c['name'] for c in inspector.get_columns('task_history')]
+                if 'is_deleted' not in columns:
+                    logger.info("迁移数据库: 添加 is_deleted 列到 task_history 表")
+                    conn.execute(text("ALTER TABLE task_history ADD COLUMN is_deleted BOOLEAN DEFAULT 0"))
+                    conn.execute(text("CREATE INDEX ix_task_history_is_deleted ON task_history (is_deleted)"))
+                    conn.commit()
+    except Exception as e:
+        logger.error(f"数据库迁移失败: {e}")
     
     logger.info("数据库初始化完成")
     

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom"
-import { ImagePlus, Pencil, Layers, Clock, ArrowRight } from "lucide-react"
+import { ImagePlus, Pencil, Layers, Clock, ArrowRight, Trash2, RotateCcw } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { TaskStatusBadge } from "./TaskStatusBadge"
 import { formatDate, formatDuration, truncateText } from "@/utils/format"
 import type { TaskHistory, TaskType } from "@/types"
@@ -10,6 +11,7 @@ interface TaskCardProps {
   isRecycleBin?: boolean
   onRestore?: (taskId: string) => void
   onDelete?: (taskId: string) => void
+  onSoftDelete?: (taskId: string) => void
 }
 
 const taskTypeConfig: Record<TaskType, { label: string; icon: React.ElementType; color: string }> = {
@@ -18,13 +20,13 @@ const taskTypeConfig: Record<TaskType, { label: string; icon: React.ElementType;
   batch_edit: { label: "批量编辑", icon: Layers, color: "text-purple-500" },
 }
 
-export function TaskCard({ task }: TaskCardProps) {
+export function TaskCard({ task, isRecycleBin, onRestore, onDelete, onSoftDelete }: TaskCardProps) {
   const config = taskTypeConfig[task.task_type] || taskTypeConfig.text_to_image
   const Icon = config.icon
 
   return (
-    <Link to={`/tasks/${task.task_id}`}>
-      <Card className="hover:shadow-md transition-shadow cursor-pointer group">
+    <Card className="hover:shadow-md transition-shadow cursor-pointer group relative">
+      <Link to={!isRecycleBin ? `/tasks/${task.task_id}` : "#"} className="block">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             {/* Icon */}
@@ -54,11 +56,64 @@ export function TaskCard({ task }: TaskCardProps) {
               </div>
             </div>
 
-            {/* Arrow */}
-            <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            {/* Arrow (only if not recycle bin) */}
+            {!isRecycleBin && (
+              <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            )}
           </div>
         </CardContent>
-      </Card>
-    </Link>
+      </Link>
+      
+      {/* Actions */}
+      <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        {isRecycleBin ? (
+          <>
+            {onRestore && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 bg-background"
+                onClick={(e) => {
+                  e.preventDefault()
+                  onRestore(task.task_id)
+                }}
+                title="还原"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                variant="destructive"
+                size="icon"
+                className="h-8 w-8"
+                onClick={(e) => {
+                  e.preventDefault()
+                  onDelete(task.task_id)
+                }}
+                title="永久删除"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </>
+        ) : (
+          onSoftDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 hover:text-destructive"
+              onClick={(e) => {
+                e.preventDefault()
+                onSoftDelete(task.task_id)
+              }}
+              title="删除"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )
+        )}
+      </div>
+    </Card>
   )
 }

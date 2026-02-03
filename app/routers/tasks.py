@@ -22,6 +22,10 @@ from ..services.task_history import (
     get_user_quota_info,
     get_task_history_by_id,
     cleanup_old_task_history,
+    get_recycle_bin_tasks,
+    soft_delete_task,
+    restore_task,
+    permanent_delete_task,
 )
 from ..schemas import TaskHistoryListResponse, TaskStatistics, UserQuotaResponse
 from ..utils.logger import get_logger
@@ -42,6 +46,77 @@ async def get_queue_info(
     """
     task_queue = get_task_queue()
     return task_queue.get_queue_info(user_id=current_user.id)
+
+
+@router.get("/recycle-bin", response_model=TaskHistoryListResponse)
+async def get_recycle_bin(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    current_user: User = Depends(get_current_user),
+) -> TaskHistoryListResponse:
+    """
+    获取回收站任务列表
+    """
+    items, total = await get_recycle_bin_tasks(
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size,
+    )
+    
+    total_pages = math.ceil(total / page_size) if total > 0 else 1
+    
+    return TaskHistoryListResponse(
+        items=[item.to_dict() for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
+@router.post("/{task_id}/delete")
+async def delete_task_soft(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    删除任务（移入回收站）
+    """
+    success = await soft_delete_task(task_id, current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="任务不存在或无法删除")
+    
+    return {"message": "任务已移入回收站"}
+
+
+@router.post("/recycle-bin/{task_id}/restore")
+async def restore_task_from_bin(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    从回收站还原任务
+    """
+    success = await restore_task(task_id, current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="任务不存在或无法还原")
+    
+    return {"message": "任务已还原"}
+
+
+@router.delete("/recycle-bin/{task_id}")
+async def delete_task_permanent(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    永久删除任务
+    """
+    success = await permanent_delete_task(task_id, current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="任务不存在或无法删除")
+    
+    return {"message": "任务已永久删除"}
 
 
 @router.get("/history/me", response_model=TaskHistoryListResponse)

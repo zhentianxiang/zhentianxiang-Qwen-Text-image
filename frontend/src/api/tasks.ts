@@ -97,9 +97,14 @@ export const tasksApi = {
   },
 
   // 获取回收站任务
-  getRecycleBin: async (): Promise<TaskHistoryListResponse> => {
-    const response = await apiClient.get<TaskHistoryListResponse>('/tasks/recycle-bin')
+  getRecycleBin: async (params: { page?: number; page_size?: number } = {}): Promise<TaskHistoryListResponse> => {
+    const response = await apiClient.get<TaskHistoryListResponse>('/tasks/recycle-bin', { params })
     return response.data
+  },
+
+  // 移入回收站
+  softDeleteTask: async (taskId: string): Promise<void> => {
+    await apiClient.post(`/tasks/${taskId}/delete`)
   },
 
   // 还原任务

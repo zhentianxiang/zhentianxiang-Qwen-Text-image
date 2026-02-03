@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { History, Filter, Loader2 } from "lucide-react"
 import { tasksApi } from "@/api"
 import { Button } from "@/components/ui/button"
@@ -12,12 +12,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { TaskCard } from "@/components/tasks/TaskCard"
+import { useToast } from "@/hooks/useToast"
 
 export function HistoryPage() {
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState<string>("all")
   const [taskType, setTaskType] = useState<string>("all")
   const pageSize = 12
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-history', page, status, taskType],
@@ -28,6 +31,28 @@ export function HistoryPage() {
       task_type: taskType === "all" ? undefined : taskType,
     }),
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: tasksApi.softDeleteTask,
+    onSuccess: () => {
+      toast({
+        title: "已删除",
+        description: "任务已移入回收站",
+      })
+      queryClient.invalidateQueries({ queryKey: ['my-history'] })
+    },
+    onError: () => {
+      toast({
+        title: "删除失败",
+        description: "无法删除该任务",
+        variant: "destructive",
+      })
+    },
+  })
+
+  const handleSoftDelete = (taskId: string) => {
+    deleteMutation.mutate(taskId)
+  }
 
   return (
     <div className="space-y-6 animate-in">
@@ -86,7 +111,11 @@ export function HistoryPage() {
         <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {data.items.map((task) => (
-              <TaskCard key={task.task_id} task={task} />
+              <TaskCard 
+                key={task.task_id} 
+                task={task} 
+                onSoftDelete={handleSoftDelete}
+              />
             ))}
           </div>
 

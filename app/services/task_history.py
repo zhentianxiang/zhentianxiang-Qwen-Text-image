@@ -51,7 +51,7 @@ async def get_user_task_history(
     """
     async with get_db_session() as db:
         # 构建查询条件
-        conditions = [TaskHistory.user_id == user_id]
+        conditions = [TaskHistory.user_id == user_id, TaskHistory.is_deleted == False]
         
         if status:
             conditions.append(TaskHistory.status == status)
@@ -108,7 +108,7 @@ async def get_all_task_history(
     """
     async with get_db_session() as db:
         # 构建查询条件
-        conditions = []
+        conditions = [TaskHistory.is_deleted == False]
         
         if status:
             conditions.append(TaskHistory.status == status)
@@ -455,3 +455,93 @@ async def cleanup_old_task_history(days: int = 30) -> int:
             logger.info(f"清理了 {count} 条旧任务历史记录")
         
         return count
+    
+    
+async def get_recycle_bin_tasks(
+    user_id: int,
+    page: int = 1,
+    page_size: int = 20,
+) -> Tuple[List[TaskHistory], int]:
+    """获取回收站任务"""
+    async with get_db_session() as db:
+        conditions = [TaskHistory.user_id == user_id, TaskHistory.is_deleted == True]
+        
+        # 查询总数
+        count_result = await db.execute(
+            select(func.count(TaskHistory.id)).where(and_(*conditions))
+        )
+        total = count_result.scalar()
+        
+        # 查询数据
+        offset = (page - 1) * page_size
+        result = await db.execute(
+            select(TaskHistory)
+            .where(and_(*conditions))
+            .order_by(desc(TaskHistory.created_at))
+            .offset(offset)
+            .limit(page_size)
+        )
+        items = result.scalars().all()
+        
+        return list(items), total
+
+
+async def soft_delete_task(task_id: str, user_id: int) -> bool:
+    """软删除任务（移入回收站）"""
+    async with get_db_session() as db:
+        result = await db.execute(
+            select(TaskHistory).where(
+                and_(TaskHistory.task_id == task_id, TaskHistory.user_id == user_id)
+            )
+        )
+        task = result.scalar_one_or_none()
+        
+        if task:
+            task.is_deleted = True
+            await db.commit()
+            return True
+        return False
+
+
+async def restore_task(task_id: str, user_id: int) -> bool:
+    """从回收站还原任务"""
+    async with get_db_session() as db:
+        result = await db.execute(
+            select(TaskHistory).where(
+                and_(TaskHistory.task_id == task_id, TaskHistory.user_id == user_id)
+            )
+        )
+        task = result.scalar_one_or_none()
+        
+        if task:
+            task.is_deleted = False
+            await db.commit()
+            return True
+        return False
+
+
+async def permanent_delete_task(task_id: str, user_id: int) -> bool:
+    """永久删除任务"""
+    async with get_db_session() as db:
+        result = await db.execute(
+            select(TaskHistory).where(
+                and_(TaskHistory.task_id == task_id, TaskHistory.user_id == user_id)
+            )
+        )
+        task = result.scalar_one_or_none()
+        
+        if task:
+            # 如果有结果文件，也应该尝试删除文件（这里简化处理，假设cleanup会处理孤儿文件，或者需要额外逻辑）
+            # 实际上最好在这里也删除文件
+            if task.result_path:
+                import os
+                if os.path.exists(task.result_path):
+                    try:
+                        os.remove(task.result_path)
+                    except Exception as e:
+                        logger.error(f"删除文件失败: {e}")
+                        
+            await db.delete(task)
+            await db.commit()
+            return True
+        return False
