@@ -1,0 +1,106 @@
+# ==============================================
+# Qwen Image Service - Docker Compose
+# ==============================================
+
+services:
+  qwen-image:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qwen-image-service
+    user: root
+    restart: unless-stopped
+    
+    # GPU支持
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              #device_ids: ["2"]
+              device_ids: ["0", "1", "2"]
+              capabilities: [gpu]
+    
+    ports:
+      - "8200:8000"
+    
+    volumes:
+      # 本地模型目录挂载
+      - ./models:/app/models
+      # HuggingFace缓存持久化（在线下载模型时使用）
+      - huggingface_cache:/home/appuser/.cache/huggingface
+      # 配置文件挂载（可选，方便修改配置）
+      - ./config:/app/config:ro
+      # 日志目录（可选）
+      - ./logs:/app/logs
+      # 数据目录（SQLite数据库持久化）
+      - ./data:/app/data
+    
+    environment:
+      # 服务配置
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - APP_DEBUG=false
+
+      # 模型配置
+      # 使用HuggingFace在线模型：
+      #- TEXT_TO_IMAGE_MODEL=Qwen/Qwen-Image-2512
+      #- IMAGE_EDIT_MODEL=Qwen/Qwen-Image-Edit-2511
+      # 或使用本地模型路径（取消注释）：
+      - TEXT_TO_IMAGE_MODEL=/app/models/Qwen-Image-2512
+      - IMAGE_EDIT_MODEL=/app/models/Qwen-Image-Edit-2511
+      - MODELS_DIR=/app/models
+      - DEVICE=cuda
+      
+      # HuggingFace配置（可选，如果需要私有模型）
+      # - HF_TOKEN=your_token_here
+      # 使用HuggingFace镜像（国内加速）
+      - HF_ENDPOINT=https://hf-mirror.com
+
+      # 禁用Intel XPU检测（解决torch.xpu错误）
+      - ACCELERATE_TORCH_DEVICE=cuda
+      - PYTORCH_ENABLE_MPS_FALLBACK=0
+      # 显存优化
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      
+      # 安全敏感配置（建议保留在环境变量中，生产环境通过 .env 或 secrets 注入）
+      - AUTH_SECRET_KEY=your-secret-key-change-in-production-please
+      - AUTH_DEFAULT_ADMIN_PASSWORD=admin123
+      
+      # 其他配置已移至 config/config.yaml
+      # 如果需要覆盖配置文件中的设置，仍可在此处添加对应的环境变量
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # 模型加载需要时间
+
+  # 前端服务
+  qwen-image-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: qwen-image-frontend
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    depends_on:
+      - qwen-image
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+# 持久化卷
+volumes:
+  huggingface_cache:
+    driver: local
+
+# 网络配置（可选）
+networks:
+  default:
+    name: qwen-image-network

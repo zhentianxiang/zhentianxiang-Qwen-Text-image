@@ -1,0 +1,204 @@
+# ==============================================
+# Qwen Image Service - 主配置文件
+# ==============================================
+# 此文件中的配置可以被环境变量覆盖
+
+app:
+  name: "Qwen 多模态图像API服务"
+  description: "集成文生图(Qwen-Image-2512)和图像编辑(Qwen-Image-Edit-2511)功能"
+  version: "1.0.0"
+  host: "0.0.0.0"
+  port: 8000
+  # 前端访问的基础URL (用于邮件链接，请修改为您的实际访问地址)
+  base_url: "https://dream-ai.tianxiang.love"
+  debug: false
+
+models:
+  text_to_image:
+    name: "Qwen/Qwen-Image-2512"
+    description: "Qwen-Image-2512 文生图模型"
+    capabilities:
+      - "text-to-image"
+      - "image generation"
+  
+  image_edit:
+    name: "Qwen/Qwen-Image-Edit-2511"
+    description: "Qwen-Image-Edit-2511 图像编辑模型"
+    capabilities:
+      - "image-to-image"
+      - "image editing"
+      - "multi-image composition"
+
+  # 模型存储目录
+  models_dir: "./models"
+
+generation:
+  # 默认推理参数
+  default_num_inference_steps: 50
+  default_guidance_scale: 7.5
+  default_true_cfg_scale: 4.0
+  
+  # 默认图像尺寸
+  default_width: 1024
+  default_height: 1024
+  
+  # 推理步数限制
+  min_inference_steps: 20
+  max_inference_steps: 100
+  
+  # 每次请求最大生成图像数
+  max_images_per_request: 4
+  
+  # 批量编辑最大提示数
+  max_batch_prompts: 10
+
+# 支持的宽高比及其对应尺寸
+aspect_ratios:
+  "1:1": [1024, 1024]
+  "16:9": [1664, 928]
+  "16:9-2K": [2560, 1440]  # 常用2K（16:9）
+  "16:9-4K": [3840, 2160]  # 标准4K（16:9）
+  "16:9-2K-影视": [2048, 1080] # 影视行业2K（可选）
+  "9:16": [928, 1664]
+  "4:3": [1472, 1104]
+  "3:4": [1104, 1472]
+  "3:2": [1584, 1056]
+  "2:3": [1056, 1584]
+
+security:
+  # 上传文件大小限制 (MB)
+  max_upload_size_mb: 20
+  
+  # 允许的图像MIME类型
+  allowed_image_types:
+    - "image/jpeg"
+    - "image/png"
+    - "image/webp"
+  
+  # CORS配置
+  cors:
+    # 生产环境请指定具体域名
+    origins:
+      - "*"
+    allow_credentials: true
+    allow_methods:
+      - "*"
+    allow_headers:
+      - "*"
+
+  # 速率限制配置 (Rate Limiting)
+  rate_limit:
+    enabled: true
+    # 全局限制
+    global_limit: "100/minute"
+    # 登录接口限制
+    login_limit: "5/minute"
+    # 注册接口限制
+    register_limit: "3/hour"
+    # 生成接口限制
+    generation_limit: "10/minute"
+
+# 邮件配置 (QQ邮箱示例)
+email:
+  enabled: true
+  smtp_server: "smtp.qq.com"
+  smtp_port: 587
+  smtp_username: "2099637909@qq.com"  # 请修改为你的QQ邮箱
+  smtp_password: "xxxxxxxxxxxxx"        # 请修改为QQ邮箱授权码
+  from_email: "2099637909@qq.com"     # 发件人邮箱
+  from_name: "Qwen Image Service"        # 发件人名称
+  tls: true
+  ssl: false
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  # 是否输出到文件
+  file_enabled: true
+  file_path: "./logs/app.log"
+
+cleanup:
+  # 是否启用自动清理临时文件
+  enabled: true
+  # 临时文件最大保留时间 (小时)
+  max_age_hours: 24
+  # 清理检查间隔 (分钟)
+  check_interval_minutes: 60
+
+# 任务队列配置
+task_queue:
+  # 最大并行工作者数量（默认自动检测GPU数量）
+  # 设为0表示自动检测
+  # 设为1表示强制串行（推荐用于多卡运行大模型，如生成4K图）
+  max_workers: 1
+  
+  # 执行模式
+  # 'thread': 使用线程池，模型常驻内存（响应快，但显存可能无法释放）
+  # 'process': 为每个任务启动新进程（彻底释放内存，但每次需重新加载模型，延迟高）
+  execution_mode: "process"
+  
+  # 任务结果保留时间（小时）
+  result_retention_hours: 24
+  
+  # 同步模式超时时间（秒）
+  sync_timeout_seconds: 600
+
+# 用户认证配置
+auth:
+  # 是否启用认证（设为 false 可禁用认证，所有接口无需登录）
+  enabled: true
+  
+  # JWT 密钥（生产环境请修改为随机字符串）
+  # 可通过环境变量 AUTH_SECRET_KEY 覆盖
+  secret_key: "your-secret-key-change-in-production-please"
+  
+  # JWT 算法
+  algorithm: "HS256"
+  
+  # Token 过期时间（分钟），默认 24 小时
+  access_token_expire_minutes: 1440
+  
+  # SQLite 数据库路径
+  # 可通过环境变量 AUTH_DATABASE_URL 覆盖
+  database_url: "sqlite:///./data/users.db"
+  
+  # 默认管理员账号（首次启动时自动创建）
+  # 可通过环境变量 AUTH_DEFAULT_ADMIN_USERNAME 和 AUTH_DEFAULT_ADMIN_PASSWORD 覆盖
+  default_admin_username: "admin"
+  default_admin_password: "admin123"
+  
+  # 是否允许用户自行注册
+  allow_registration: true
+
+# 配额限制配置
+quota:
+  # 是否启用配额限制
+  enabled: true
+  
+  # 默认每日限额（0表示不限制）
+  # 按生成图片数量消耗配额：生成几张图消耗几次
+  default_daily_limit: 100
+  
+  # 默认每月限额（0表示不限制）
+  default_monthly_limit: 3000
+  
+  # 管理员是否不受配额限制
+  admin_unlimited: true
+
+# 存储配置（图片持久化）
+storage:
+  # 输出目录（生成的图片将保存在此目录）
+  # 在 Docker 中会映射到 ./data/outputs
+  output_dir: "/app/data/outputs"
+  
+  # 是否按日期组织子目录（年/月/日）
+  # 启用后目录结构：/app/data/outputs/2026/01/27/
+  organize_by_date: true
+  
+  # 是否按用户ID组织子目录
+  # 启用后目录结构：/app/data/outputs/2026/01/27/user_1/
+  organize_by_user: true
+  
+  # 文件保留天数（0表示永久保留）
+  # 设置后会自动清理超过该天数的旧文件
+  retention_days: 0

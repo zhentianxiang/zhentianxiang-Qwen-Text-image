@@ -1,0 +1,45 @@
+# Qwen Image Service - Dependencies
+# ==================================
+
+# Web框架
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# 配置管理
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+PyYAML>=6.0.1
+
+# AI/ML
+# torch 已包含在基础镜像中，无需重复安装
+# torch>=2.4.0
+diffusers>=0.30.0
+transformers>=4.40.0
+accelerate>=0.30.0
+sentencepiece>=0.2.0
+
+# 图像处理
+Pillow>=10.0.0
+
+# 可选: 环境变量管理
+python-dotenv>=1.0.0
+
+# 数据库
+sqlalchemy>=2.0.0
+aiosqlite>=0.19.0
+
+# 认证
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+# 注意: bcrypt 4.1+ 与 passlib 不兼容，需要限制版本
+bcrypt>=4.0.0,<4.1.0
+
+# 邮件发送
+fastapi-mail>=1.4.1
+
+# 速率限制
+slowapi>=0.1.9
+
+# 系统监控
+psutil>=5.9.0
