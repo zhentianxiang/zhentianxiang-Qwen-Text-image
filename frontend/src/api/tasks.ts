@@ -95,4 +95,20 @@ export const tasksApi = {
     })
     return response.data
   },
+
+  // 获取回收站任务
+  getRecycleBin: async (): Promise<TaskHistoryListResponse> => {
+    const response = await apiClient.get<TaskHistoryListResponse>('/tasks/recycle-bin')
+    return response.data
+  },
+
+  // 还原任务
+  restoreTask: async (taskId: string): Promise<void> => {
+    await apiClient.post(`/tasks/recycle-bin/${taskId}/restore`)
+  },
+
+  // 永久删除任务
+  permanentDeleteTask: async (taskId: string): Promise<void> => {
+    await apiClient.delete(`/tasks/recycle-bin/${taskId}`)
+  },
 }

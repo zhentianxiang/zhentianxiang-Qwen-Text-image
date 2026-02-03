@@ -7,6 +7,9 @@ import type { TaskHistory, TaskType } from "@/types"
 
 interface TaskCardProps {
   task: TaskHistory
+  isRecycleBin?: boolean
+  onRestore?: (taskId: string) => void
+  onDelete?: (taskId: string) => void
 }
 
 const taskTypeConfig: Record<TaskType, { label: string; icon: React.ElementType; color: string }> = {
