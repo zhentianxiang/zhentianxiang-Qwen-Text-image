@@ -104,7 +104,7 @@ email:
   smtp_server: "smtp.qq.com"
   smtp_port: 587
   smtp_username: "2099637909@qq.com"  # 请修改为你的QQ邮箱
-  smtp_password: "axfemcfxzkspcheb"        # 请修改为QQ邮箱授权码
+  smtp_password: "xxxxxxxxxxxxxxxxx"        # 请修改为QQ邮箱授权码
   from_email: "2099637909@qq.com"     # 发件人邮箱
   from_name: "Qwen Image Service"        # 发件人名称
   tls: true
