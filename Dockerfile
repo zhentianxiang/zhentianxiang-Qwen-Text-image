@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libxrender-dev \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # 配置pip使用中科大镜像
