@@ -4,7 +4,7 @@
 提供用户注册、登录、Token 刷新、密码重置等接口
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List, Optional
 import uuid
 
@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from ..config import settings
-from ..models.database import User, get_db
+from ..models.database import User, UserQuota, get_db
 from ..schemas.user import (
     UserCreate,
     UserLogin,
@@ -22,6 +22,10 @@ from ..schemas.user import (
     UserUpdate,
     Token,
     PasswordChange,
+    UserAdminCreate,
+    UserAdminUpdate,
+    UserQuotaResponse,
+    UserQuotaUpdate,
 )
 from ..services.auth import (
     get_password_hash,
@@ -59,19 +63,13 @@ async def register(
 ) -> User:
     """
     用户注册
-    
-    - **username**: 用户名（3-50字符）
-    - **password**: 密码（至少6字符）
-    - **email**: 邮箱（必须）
     """
-    # 检查是否允许注册
     if not settings.auth.allow_registration:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="当前不允许用户注册"
         )
     
-    # 检查用户名是否已存在
     existing_user = await get_user_by_username(db, user_data.username)
     if existing_user:
         raise HTTPException(
@@ -79,13 +77,8 @@ async def register(
             detail="用户名已存在"
         )
     
-    # 检查邮箱注册数量限制
     if user_data.email:
-        # 强制转换为小写
         user_data.email = user_data.email.lower()
-        
-        # 统计该邮箱已注册的账号数量
-        # 注意: select(func.count()) 需要导入 func
         from sqlalchemy import func
         result = await db.execute(
             select(func.count()).select_from(User).where(User.email == user_data.email)
@@ -103,11 +96,9 @@ async def register(
             detail="请输入有效的邮箱地址"
         )
     
-    # 生成验证Token
     verification_token = uuid.uuid4().hex if settings.email.enabled else None
-    is_verified = not settings.email.enabled # 如果未启用邮件，则自动验证通过
+    is_verified = not settings.email.enabled
     
-    # 创建用户
     new_user = User(
         username=user_data.username,
         email=user_data.email,
@@ -124,13 +115,11 @@ async def register(
     
     logger.info(f"新用户注册: {new_user.username}")
     
-    # 发送验证邮件
     if settings.email.enabled and user_data.email:
         try:
             await send_verification_email(user_data.email, verification_token, user_data.username, str(request.base_url))
         except Exception as e:
             logger.error(f"验证邮件发送失败: {e}")
-            # 不回滚注册，允许用户重发
     
     return new_user
 
@@ -154,14 +143,12 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # 检查邮箱验证状态
     if settings.email.enabled and not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="请先验证您的邮箱",
         )
     
-    # 创建 Token
     access_token_expires = timedelta(minutes=settings.auth.access_token_expire_minutes)
     access_token = create_access_token(
         data={
@@ -188,9 +175,6 @@ async def forgot_password(
     data: PasswordResetRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    忘记密码 - 发送重置邮件
-    """
     if not settings.email.enabled:
         raise HTTPException(status_code=400, detail="邮件服务未启用")
         
@@ -201,10 +185,8 @@ async def forgot_password(
     user = result.scalar_one_or_none()
     
     if not user or user.username != data.username:
-        # 为了安全，不提示用户不存在或不匹配
         return {"message": "如果该邮箱和用户名匹配，重置邮件已发送"}
         
-    # 生成重置Token (复用 verification_token 字段)
     reset_token = uuid.uuid4().hex
     user.verification_token = reset_token
     await db.commit()
@@ -225,9 +207,6 @@ async def reset_password(
     data: PasswordResetConfirm,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    重置密码 - 使用 Token
-    """
     result = await db.execute(
         select(User).where(User.verification_token == data.token)
     )
@@ -236,10 +215,8 @@ async def reset_password(
     if not user:
         raise HTTPException(status_code=400, detail="无效或过期的重置链接")
         
-    # 重置密码
     user.hashed_password = get_password_hash(data.new_password)
-    user.verification_token = None # 清除 Token
-    # 如果用户之前未验证，重置密码可视作已验证？通常是的，因为他们访问了邮箱
+    user.verification_token = None
     if not user.is_verified:
         user.is_verified = True
         
@@ -254,9 +231,6 @@ async def verify_email(
     token: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    验证邮箱
-    """
     result = await db.execute(
         select(User).where(User.verification_token == token)
     )
@@ -279,15 +253,12 @@ async def verify_email(
 
 
 @router.post("/resend-verification-email")
-@limiter.limit("3/hour") # 限制重发频率
+@limiter.limit("3/hour")
 async def resend_verification_email(
     request: Request,
-    email: str = Body(..., embed=True), # 接收 {"email": "..."}
+    email: str = Body(..., embed=True),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    重发验证邮件
-    """
     if not settings.email.enabled:
         raise HTTPException(status_code=400, detail="邮件服务未启用")
         
@@ -303,7 +274,6 @@ async def resend_verification_email(
     if user.is_verified:
         return {"message": "该账号已验证"}
         
-    # 生成新Token
     new_token = uuid.uuid4().hex
     user.verification_token = new_token
     await db.commit()
@@ -321,9 +291,6 @@ async def resend_verification_email(
 async def get_me(
     current_user: User = Depends(get_current_active_user),
 ) -> User:
-    """
-    获取当前登录用户信息
-    """
     return current_user
 
 
@@ -333,26 +300,22 @@ async def update_me(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """
-    更新当前用户信息
-    """
-    # 更新邮箱
     if user_data.email is not None:
-        # 检查邮箱是否已被使用
-        result = await db.execute(
-            select(User).where(
-                User.email == user_data.email,
-                User.id != current_user.id
+        user_data.email = user_data.email.lower()
+        if user_data.email != current_user.email:
+            from sqlalchemy import func
+            result = await db.execute(
+                select(func.count()).select_from(User).where(User.email == user_data.email)
             )
-        )
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="邮箱已被使用"
-            )
+            count = result.scalar_one()
+            
+            if count >= 5:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="该邮箱已达到最大注册账号数量限制(5个)"
+                )
         current_user.email = user_data.email
     
-    # 更新密码
     if user_data.password is not None:
         current_user.hashed_password = get_password_hash(user_data.password)
     
@@ -360,7 +323,6 @@ async def update_me(
     await db.refresh(current_user)
     
     logger.info(f"用户信息已更新: {current_user.username}")
-    
     return current_user
 
 
@@ -370,22 +332,16 @@ async def change_password(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """
-    修改密码
-    """
-    # 验证原密码
     if not verify_password(password_data.old_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="原密码错误"
         )
     
-    # 更新密码
     current_user.hashed_password = get_password_hash(password_data.new_password)
     await db.commit()
     
     logger.info(f"用户密码已修改: {current_user.username}")
-    
     return {"message": "密码修改成功"}
 
 
@@ -405,6 +361,221 @@ async def list_users(
         select(User).offset(skip).limit(limit)
     )
     return result.scalars().all()
+
+
+@router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user_admin(
+    user_data: UserAdminCreate,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    创建新用户（管理员）
+    """
+    existing_user = await get_user_by_username(db, user_data.username)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户名已存在"
+        )
+    
+    if user_data.email:
+        user_data.email = user_data.email.lower()
+        from sqlalchemy import func
+        result = await db.execute(
+            select(func.count()).select_from(User).where(User.email == user_data.email)
+        )
+        count = result.scalar_one()
+        if count >= 5:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="该邮箱已达到最大注册账号数量限制(5个)"
+            )
+            
+    new_user = User(
+        username=user_data.username,
+        email=user_data.email,
+        hashed_password=get_password_hash(user_data.password),
+        is_active=True,
+        is_admin=user_data.is_admin,
+        is_verified=True,
+    )
+    
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    
+    new_quota = UserQuota(
+        user_id=new_user.id,
+        daily_limit=settings.quota.default_daily_limit,
+        monthly_limit=settings.quota.default_monthly_limit
+    )
+    db.add(new_quota)
+    await db.commit()
+    
+    logger.info(f"管理员创建用户: {new_user.username}")
+    return new_user
+
+
+@router.put("/users/{user_id}", response_model=UserResponse)
+async def update_user_admin(
+    user_id: int,
+    user_data: UserAdminUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """
+    更新用户信息（管理员）
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+        
+    if user_data.email is not None:
+        user_data.email = user_data.email.lower()
+        if user_data.email != user.email:
+            from sqlalchemy import func
+            result = await db.execute(
+                select(func.count()).select_from(User).where(User.email == user_data.email)
+            )
+            count = result.scalar_one()
+            if count >= 5:
+                 raise HTTPException(status_code=400, detail="该邮箱已达到最大注册账号数量限制(5个)")
+            user.email = user_data.email
+            
+    if user_data.password is not None:
+        user.hashed_password = get_password_hash(user_data.password)
+        
+    if user_data.is_active is not None:
+        if user.id == current_user.id and not user_data.is_active:
+            raise HTTPException(status_code=400, detail="不能禁用自己")
+        user.is_active = user_data.is_active
+        
+    if user_data.is_admin is not None:
+        if user.id == current_user.id and not user_data.is_admin:
+            raise HTTPException(status_code=400, detail="不能取消自己的管理员权限")
+        user.is_admin = user_data.is_admin
+        
+    await db.commit()
+    await db.refresh(user)
+    
+    logger.info(f"管理员更新用户: {user.username}")
+    return user
+
+
+@router.get("/users/{user_id}/quota", response_model=UserQuotaResponse)
+async def get_user_quota(
+    user_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    获取用户配额（管理员）
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+        
+    result = await db.execute(select(UserQuota).where(UserQuota.user_id == user_id))
+    quota = result.scalar_one_or_none()
+    
+    # 如果没有配额，创建默认配额
+    if not quota:
+        quota = UserQuota(
+            user_id=user_id,
+            daily_limit=settings.quota.default_daily_limit,
+            monthly_limit=settings.quota.default_monthly_limit
+        )
+        db.add(quota)
+        await db.commit()
+        await db.refresh(quota)
+        
+    # 计算剩余配额
+    now = datetime.now()
+    used_today = quota.used_today
+    used_this_month = quota.used_this_month
+    
+    if quota.last_daily_reset.date() < now.date():
+        used_today = 0
+    if quota.last_monthly_reset.month != now.month or quota.last_monthly_reset.year != now.year:
+        used_this_month = 0
+        
+    remaining_today = max(0, quota.daily_limit - used_today) if quota.daily_limit > 0 else -1
+    remaining_this_month = max(0, quota.monthly_limit - used_this_month) if quota.monthly_limit > 0 else -1
+    
+    return {
+        "user_id": quota.user_id,
+        "daily_limit": quota.daily_limit,
+        "monthly_limit": quota.monthly_limit,
+        "used_today": used_today,
+        "used_this_month": used_this_month,
+        "total_used": quota.total_used,
+        "remaining_today": remaining_today,
+        "remaining_this_month": remaining_this_month,
+    }
+
+
+@router.put("/users/{user_id}/quota", response_model=UserQuotaResponse)
+async def update_user_quota(
+    user_id: int,
+    quota_data: UserQuotaUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    更新用户配额（管理员）
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    result = await db.execute(select(UserQuota).where(UserQuota.user_id == user_id))
+    quota = result.scalar_one_or_none()
+    
+    if not quota:
+        quota = UserQuota(
+            user_id=user_id,
+            daily_limit=settings.quota.default_daily_limit,
+            monthly_limit=settings.quota.default_monthly_limit
+        )
+        db.add(quota)
+    
+    if quota_data.daily_limit is not None:
+        quota.daily_limit = quota_data.daily_limit
+    
+    if quota_data.monthly_limit is not None:
+        quota.monthly_limit = quota_data.monthly_limit
+        
+    await db.commit()
+    await db.refresh(quota)
+    
+    # 计算剩余配额
+    now = datetime.now()
+    used_today = quota.used_today
+    used_this_month = quota.used_this_month
+    
+    if quota.last_daily_reset.date() < now.date():
+        used_today = 0
+    if quota.last_monthly_reset.month != now.month or quota.last_monthly_reset.year != now.year:
+        used_this_month = 0
+        
+    remaining_today = max(0, quota.daily_limit - used_today) if quota.daily_limit > 0 else -1
+    remaining_this_month = max(0, quota.monthly_limit - used_this_month) if quota.monthly_limit > 0 else -1
+    
+    return {
+        "user_id": quota.user_id,
+        "daily_limit": quota.daily_limit,
+        "monthly_limit": quota.monthly_limit,
+        "used_today": used_today,
+        "used_this_month": used_this_month,
+        "total_used": quota.total_used,
+        "remaining_today": remaining_today,
+        "remaining_this_month": remaining_this_month,
+    }
 
 
 @router.put("/users/{user_id}/toggle-active")

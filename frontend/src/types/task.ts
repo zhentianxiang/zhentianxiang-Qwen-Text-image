@@ -82,13 +82,3 @@ export interface QueueInfo {
   }
 }
 
-export interface UserQuota {
-  user_id: number
-  daily_limit: number
-  monthly_limit: number
-  used_today: number
-  used_this_month: number
-  total_used: number
-  remaining_today: number
-  remaining_this_month: number
-}

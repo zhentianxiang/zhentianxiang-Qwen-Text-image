@@ -1,5 +1,15 @@
 import apiClient from './client'
-import type { User, LoginRequest, RegisterRequest, TokenResponse, PasswordChangeRequest } from '@/types'
+import type { 
+  User, 
+  LoginRequest, 
+  RegisterRequest, 
+  TokenResponse, 
+  PasswordChangeRequest,
+  UserQuota,
+  UserAdminCreate,
+  UserAdminUpdate,
+  UserQuotaUpdate
+} from '@/types'
 
 export const authApi = {
   login: async (data: LoginRequest): Promise<TokenResponse> => {
@@ -53,6 +63,26 @@ export const authApi = {
   // Admin APIs
   getUsers: async (skip = 0, limit = 100): Promise<User[]> => {
     const response = await apiClient.get<User[]>('/auth/users', { params: { skip, limit } })
+    return response.data
+  },
+
+  createUser: async (data: UserAdminCreate): Promise<User> => {
+    const response = await apiClient.post<User>('/auth/users', data)
+    return response.data
+  },
+
+  updateUser: async (userId: number, data: UserAdminUpdate): Promise<User> => {
+    const response = await apiClient.put<User>(`/auth/users/${userId}`, data)
+    return response.data
+  },
+
+  getUserQuota: async (userId: number): Promise<UserQuota> => {
+    const response = await apiClient.get<UserQuota>(`/auth/users/${userId}/quota`)
+    return response.data
+  },
+
+  updateUserQuota: async (userId: number, data: UserQuotaUpdate): Promise<UserQuota> => {
+    const response = await apiClient.put<UserQuota>(`/auth/users/${userId}/quota`, data)
     return response.data
   },
 

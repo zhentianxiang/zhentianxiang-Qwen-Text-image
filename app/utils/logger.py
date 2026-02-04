@@ -72,6 +72,12 @@ def init_logging(
     root_logger.addHandler(_console_handler)
     if _file_handler:
         root_logger.addHandler(_file_handler)
+        
+        # 同时将文件处理器添加到 uvicorn 日志记录器
+        # 这样 uvicorn 的请求日志(access log)和错误日志也能写入文件
+        for log_name in ["uvicorn", "uvicorn.access", "uvicorn.error"]:
+            logger = logging.getLogger(log_name)
+            logger.addHandler(_file_handler)
     
     _initialized = True
 

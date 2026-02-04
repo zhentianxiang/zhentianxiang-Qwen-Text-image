@@ -57,3 +57,39 @@ class PasswordChange(BaseModel):
     """修改密码请求"""
     old_password: str = Field(..., description="原密码")
     new_password: str = Field(..., min_length=6, max_length=100, description="新密码")
+
+
+class UserAdminCreate(BaseModel):
+    """管理员创建用户"""
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=6, max_length=100)
+    email: Optional[str] = None
+    is_admin: bool = False
+
+
+class UserAdminUpdate(BaseModel):
+    """管理员更新用户"""
+    email: Optional[str] = None
+    password: Optional[str] = Field(None, min_length=6, max_length=100)
+    is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+
+
+class UserQuotaResponse(BaseModel):
+    """配额信息响应"""
+    user_id: int
+    daily_limit: int
+    monthly_limit: int
+    used_today: int
+    used_this_month: int
+    total_used: int
+    remaining_today: int
+    remaining_this_month: int
+    
+    model_config = {"from_attributes": True}
+
+
+class UserQuotaUpdate(BaseModel):
+    """配额更新"""
+    daily_limit: Optional[int] = None
+    monthly_limit: Optional[int] = None
